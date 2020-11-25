@@ -36,7 +36,7 @@ public class StreamingSheet implements Sheet {
     reader.setSheet(this);
   }
 
-  StreamingSheetReader getReader() {
+  public StreamingSheetReader getReader() {
     return reader;
   }
 

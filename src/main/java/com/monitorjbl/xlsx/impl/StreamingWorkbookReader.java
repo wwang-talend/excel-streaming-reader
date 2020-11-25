@@ -94,7 +94,7 @@ public class StreamingWorkbookReader implements Iterable<Sheet>, AutoCloseable {
       throw new ReadException("Unable to read input stream", e);
     } catch(RuntimeException e) {
       if(f != null) {
-        f.delete();
+        FilesHelper.deleteQuietly(f);
       }
       throw e;
     }
@@ -159,7 +159,9 @@ public class StreamingWorkbookReader implements Iterable<Sheet>, AutoCloseable {
     int i = 0;
     for(URI uri : sheetStreams.keySet()) {
       XMLEventReader parser = StaxHelper.newXMLInputFactory().createXMLEventReader(sheetStreams.get(uri));
-      sheets.add(new StreamingSheet(sheetProperties.get(i++).get("name"), new StreamingSheetReader(sst, stylesTable, parser, use1904Dates, rowCacheSize)));
+      if (i < sheetProperties.size()) {
+        sheets.add(new StreamingSheet(sheetProperties.get(i++).get("name"), new StreamingSheetReader(sst, stylesTable, parser, use1904Dates, rowCacheSize)));
+      }
     }
   }
 
@@ -201,14 +203,14 @@ public class StreamingWorkbookReader implements Iterable<Sheet>, AutoCloseable {
         if(log.isDebugEnabled()) {
           log.debug("Deleting tmp file [" + tmp.getAbsolutePath() + "]");
         }
-        tmp.delete();
+        FilesHelper.deleteQuietly(tmp);
       }
       if(sst instanceof BufferedStringsTable) {
         if(log.isDebugEnabled()) {
           log.debug("Deleting sst cache file [" + this.sstCache.getAbsolutePath() + "]");
         }
         ((BufferedStringsTable) sst).close();
-        sstCache.delete();
+        FilesHelper.deleteQuietly(sstCache);
       }
     }
   }

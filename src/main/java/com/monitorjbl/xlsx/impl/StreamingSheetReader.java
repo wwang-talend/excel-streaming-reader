@@ -4,6 +4,7 @@ import com.monitorjbl.xlsx.exceptions.CloseException;
 import com.monitorjbl.xlsx.exceptions.ParseException;
 import org.apache.poi.ss.usermodel.BuiltinFormats;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.util.CellReference;
@@ -29,13 +30,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
+
 public class StreamingSheetReader implements Iterable<Row> {
   private static final Logger log = LoggerFactory.getLogger(StreamingSheetReader.class);
 
   private final SharedStringsTable sst;
   private final StylesTable stylesTable;
   private final XMLEventReader parser;
-  private final DataFormatter dataFormatter = new DataFormatter();
+  private final DataFormatter dataFormatter = new CustomDataFormatter();
   private final Set<Integer> hiddenColumns = new HashSet<>();
 
   private int lastRowNum;
@@ -51,6 +54,19 @@ public class StreamingSheetReader implements Iterable<Row> {
   private StreamingRow currentRow;
   private StreamingCell currentCell;
   private boolean use1904Dates;
+
+  //the fields below is added by TPD, we keep it
+
+  // sheet dimension
+  // <dimension ref="A1:B60"/>
+  private String dimension = "";
+
+  private int colNumber = 0;
+
+  // we need to track empty rows
+  private int firstRowIndex = -1;
+
+  private boolean parsingCols = false;
 
   public StreamingSheetReader(SharedStringsTable sst, StylesTable stylesTable, XMLEventReader parser,
                               final boolean use1904Dates, int rowCacheSize) {
@@ -81,6 +97,19 @@ public class StreamingSheetReader implements Iterable<Row> {
     } catch(XMLStreamException e) {
       throw new ParseException("Error reading XML stream", e);
     }
+  }
+
+  public int getColNumber() {
+    // the last col element is the aggregation of end of columns so it's not a real one
+    return colNumber - 1;
+  }
+
+  public int getFirstRowIndex() {
+    return firstRowIndex;
+  }
+
+  public String getDimension() {
+    return dimension;
   }
 
   private String[] splitCellRef(String ref) {
@@ -118,8 +147,13 @@ public class StreamingSheetReader implements Iterable<Row> {
 
       if("row".equals(tagLocalName)) {
         Attribute rowNumAttr = startElement.getAttributeByName(new QName("r"));
+
         int rowIndex = currentRowNum;
         if(rowNumAttr != null) {
+          if (firstRowIndex == -1) {
+            firstRowIndex = Integer.parseInt(rowNumAttr.getValue());
+          }
+
           rowIndex = Integer.parseInt(rowNumAttr.getValue()) - 1;
           currentRowNum = rowIndex;
         }
@@ -127,6 +161,8 @@ public class StreamingSheetReader implements Iterable<Row> {
         boolean isHidden = isHiddenAttr != null && ("1".equals(isHiddenAttr.getValue()) || "true".equals(isHiddenAttr.getValue()));
         currentRow = new StreamingRow(sheet, rowIndex, isHidden);
         currentColNum = firstColNum;
+      } else if ("cols".equals(tagLocalName)) {
+        parsingCols = true;
       } else if("col".equals(tagLocalName)) {
         Attribute isHiddenAttr = startElement.getAttributeByName(new QName("hidden"));
         boolean isHidden = isHiddenAttr != null && ("1".equals(isHiddenAttr.getValue()) || "true".equals(isHiddenAttr.getValue()));
@@ -137,6 +173,10 @@ public class StreamingSheetReader implements Iterable<Row> {
           int max = Integer.parseInt(maxAttr.getValue()) - 1;
           for(int columnIndex = min; columnIndex <= max; columnIndex++)
             hiddenColumns.add(columnIndex);
+        }
+
+        if(parsingCols) {
+          colNumber++;
         }
       } else if("c".equals(tagLocalName)) {
         Attribute ref = startElement.getAttributeByName(new QName("r"));
@@ -189,6 +229,14 @@ public class StreamingSheetReader implements Iterable<Row> {
             }
           }
         }
+
+        // we store the dimension as well to revert with this method when cols not found
+        // can happen see xlsx attached here https://jira.talendforge.org/browse/TDP-1957
+        // <dimension ref="A1:B60"/>
+        //this code is added by TDP team, maybe not necessary now, need a careful check, now only keep it TODO
+        if (refAttr != null){
+          this.dimension = refAttr.getValue();
+        }
       } else if("f".equals(tagLocalName)) {
         if (currentCell != null) {
           currentCell.setFormulaType(true);
@@ -216,6 +264,8 @@ public class StreamingSheetReader implements Iterable<Row> {
         if (currentCell != null) {
           currentCell.setFormula(lastContents);
         }
+      } else if ("cols".equals(tagLocalName)) {
+        parsingCols = false;
       }
 
     }
@@ -416,6 +466,26 @@ public class StreamingSheetReader implements Iterable<Row> {
     @Override
     public void remove() {
       throw new RuntimeException("NotSupported");
+    }
+  }
+
+  class CustomDataFormatter extends DataFormatter {
+
+    @Override
+    public String formatRawCellContents(double value, int formatIndex, String formatString, boolean use1904Windowing) {
+      //i don't why TDP do it, but if the comment is true below, it will break one junit : StreamingReaderTest.testSpecialStyles,
+      //as the source excel format is sure "YY", but here force to YYYY
+
+      // TDP-1656 (olamy) for some reasons poi use date format with only 2 digits for years
+      // even the excel data ws using 4 so force the pattern here
+      if ( DateUtil.isValidExcelDate( value) && StringUtils.countMatches( formatString, "y") == 2) {
+        formatString = StringUtils.replace(formatString, "yy", "yyyy");
+      }
+      if (DateUtil.isValidExcelDate(value) && StringUtils.countMatches(formatString, "Y") == 2) {
+        formatString = StringUtils.replace(formatString, "YY", "YYYY");
+      }
+      return super.formatRawCellContents(value, formatIndex, formatString, use1904Windowing);
+
     }
   }
 }

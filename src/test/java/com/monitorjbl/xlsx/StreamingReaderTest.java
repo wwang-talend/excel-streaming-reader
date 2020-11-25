@@ -478,9 +478,9 @@ public class StreamingReaderTest {
 
     assertThat(contents.size(), equalTo(2));
     assertThat(contents.get(0).size(), equalTo(4));
-    assertThat(contents.get(0).get(0).getStringCellValue(), equalTo("Thu\", \"Dec 25\", \"14"));
+    assertThat(contents.get(0).get(0).getStringCellValue(), equalTo("Thu\", \"Dec 25\", \"2014"));
     assertThat(contents.get(0).get(0).getDateCellValue(), equalTo(df.parse("25/12/2014")));
-    assertThat(contents.get(0).get(1).getStringCellValue(), equalTo("02/04/15"));
+    assertThat(contents.get(0).get(1).getStringCellValue(), equalTo("02/04/2015"));
     assertThat(contents.get(0).get(1).getDateCellValue(), equalTo(df.parse("04/02/2015")));
     assertThat(contents.get(0).get(2).getStringCellValue(), equalTo("14\". \"Mar\". \"2015"));
     assertThat(contents.get(0).get(2).getDateCellValue(), equalTo(df.parse("14/03/2015")));

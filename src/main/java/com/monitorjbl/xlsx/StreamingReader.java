@@ -3,6 +3,7 @@ package com.monitorjbl.xlsx;
 import com.monitorjbl.xlsx.exceptions.MissingSheetException;
 import com.monitorjbl.xlsx.exceptions.OpenException;
 import com.monitorjbl.xlsx.exceptions.ReadException;
+import com.monitorjbl.xlsx.impl.FilesHelper;
 import com.monitorjbl.xlsx.sst.BufferedStringsTable;
 import com.monitorjbl.xlsx.impl.StreamingSheetReader;
 import com.monitorjbl.xlsx.impl.StreamingWorkbook;
@@ -81,7 +82,7 @@ public class StreamingReader implements Iterable<Row>, AutoCloseable {
         if (log.isDebugEnabled()) {
           log.debug("Deleting tmp file [" + tmp.getAbsolutePath() + "]");
         }
-        tmp.delete();
+        FilesHelper.deleteQuietly(tmp);
       }
     }
   }
@@ -292,7 +293,7 @@ public class StreamingReader implements Iterable<Row>, AutoCloseable {
         throw new ReadException("Unable to read input stream", e);
       } catch(RuntimeException e) {
         if(f != null) {
-          f.delete();
+          FilesHelper.deleteQuietly(f);
         }
         throw e;
       }
